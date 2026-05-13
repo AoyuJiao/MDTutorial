@@ -1,0 +1,277 @@
+\documentclass[UTF8, a4paper, 11pt]{ctexart}
+
+% --- 宏包加载 ---
+\usepackage[margin=2.5cm]{geometry} % 页边距
+\usepackage{amsmath, amssymb}       % 数学公式
+\usepackage[version=4]{mhchem}      % 化学方程式 \ce{}
+\usepackage{booktabs}               % 三线表
+\usepackage{listings}               % 代码块环境
+\usepackage{xcolor}                 % 颜色支持
+\usepackage{graphicx}               % 图片支持
+\usepackage[hidelinks]{hyperref}               % 目录/引用的超链接
+\usepackage{appendix}               % 附录支持
+
+% --- 代码块样式设置 (适合 Linux/GROMACS 命令) ---
+\lstset{
+	backgroundcolor=\color{gray!10},
+	basicstyle=\small\ttfamily,
+	columns=flexible,
+	breaklines=true,
+	captionpos=b,
+	frame=single,
+	rulecolor=\color{gray!30},
+	language=bash,
+	keywordstyle=\color{blue}
+}
+
+% --- 文档信息 ---
+\title{蛋白-小分子配体的分子动力学模拟标准操作流程(SOP)}
+\author{Aoyu Jiao}
+\date{\today}
+
+\begin{document}
+	
+	\maketitle
+	
+	% --- 目录 ---
+	\pagenumbering{roman}
+	\tableofcontents
+	\newpage
+	\pagenumbering{arabic}
+	
+	% --- 第一部分：LaTeX 功能辅助模板 ---
+	\section{功能演示与复制模板 (Cheat Sheet)}
+	\label{sec:cheatsheet}
+	本节用于展示常用语法，编写文档时可直接复制。
+	
+	\subsection{命令与代码块}
+	使用 \texttt{gmx} 命令时建议使用代码块：
+	\begin{lstlisting}[caption=能量最小化命令示例]
+		gmx grompp -f em.mdp -c solv_ions.gro -p topol.top -o em.tpr
+		gmx mdrun -v -deffnm em
+	\end{lstlisting}
+	
+	\subsection{数学公式与物理量}
+	行内公式如 $\Delta G = \Delta H - T\Delta S$。
+	独立公式（带编号）：
+	\begin{equation}
+		V_{LJ}(r) = 4\epsilon \left[ \left(\frac{\sigma}{r}\right)^{12} - \left(\frac{\sigma}{r}\right)^{6} \right]
+		\label{eq:lennard_jones}
+	\end{equation}
+	
+	\subsection{化学式与溶剂}
+	使用 \ce{H2O} (TIP3P 模型) 或离子 \ce{Na+}、\ce{Cl-}。
+	反应式：\ce{Protein + Ligand -> Complex}
+	
+	\subsection{学术三线表}
+	\begin{table}[h]
+		\centering
+		\caption{模拟体系参数汇总}
+		\begin{tabular}{lll}
+			\toprule
+			参数类别 & 设定值 & 备注 \\
+			\midrule
+			Force Field & AMBER99SB-ILDN & 蛋白质力场 \\
+			Water Model & TIP3P & 溶剂模型 \\
+			Ensemble & NPT & 等温等压系综 \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\subsection{交叉引用说明}
+	如需引用公式，使用：如公式 \ref{eq:lennard_jones} 所示。
+	如需引用章节，使用：详见第 \ref{sec:workflow} 节。
+	
+	\newpage
+	
+	% --- 第二部分：正式 Protocol 内容 ---
+	\section{准备阶段 (System Preparation)}
+	%\label{sec:workflow}
+	将复合物的\texttt{pdb}文件载入WSL的文件系统，并在该处进入WSL终端。使用文本编辑器将复合物\texttt{pdb}文件拆分为表示蛋白的\texttt{protein.pdb}和表示小分子的\texttt{mol.pdb}.
+	
+	\texttt{pdb}文件的结构形式如下：
+	\begin{lstlisting}
+	ATOM      1  N   GLY A 573      19.980 -22.945  -0.960  1.00 59.13           N  
+	ATOM      2  CA  GLY A 573      19.611 -22.488  -2.288  1.00 67.26           C  
+	ATOM      3  C   GLY A 573      18.526 -21.426  -2.281  1.00 64.39           C  
+	ATOM      4  O   GLY A 573      18.719 -20.351  -2.841  1.00 66.38           O  
+	ATOM      5  N   SER A 574      17.382 -21.767  -1.679  1.00 60.85           N 
+	\end{lstlisting}
+	
+	\texttt{pdb}是顺序读写的文本型文件格式，其核心部分即\texttt{[ATOM]}字段依次定义了原子序号、原子类型、残基名称、链编号、残基序号、X坐标、Y坐标、Z坐标、占有度(概率)、B因子、原子名称。在Pymol中可视化\texttt{protein.pdb}，检查其蛋白结构是否有缺失。如缺失片段较短(<10aa)或位于非口袋区域，可以使用pdbfixer进行补全，否则使用Alpha Fold3进行补全。
+	
+	pdbfixer的使用方法如下：
+	
+	在RCSB PDB数据库查询此结构的原始\texttt{pdb}文件，并获取对应的\texttt{[SEQRES]}字段，例如：
+	\begin{lstlisting}
+	SEQRES   1 A  383  GLY SER ARG GLU PHE LYS GLN LYS TYR ASP TYR PHE ARG          
+	SEQRES   2 A  383  LYS LYS LEU LYS LYS PRO ALA ASP ILE PRO ASN ARG PHE          
+	SEQRES   3 A  383  GLU MET LYS LEU HIS ARG ASN ASN ILE PHE GLU GLU SER 
+	\end{lstlisting}
+	并将其粘贴在\texttt{protein.pdb}的\texttt{[ATOM]}字段的前面，保存文件，然后在WSL终端中输入
+	\begin{lstlisting}
+	pdbfixer
+	\end{lstlisting}
+	
+	在浏览器中访问\texttt{localhost:8000},打开pdbfixer页面，按引导补全结构即可。
+	
+	\subsection{蛋白拓扑文件的生成}
+	在WSL终端中输入
+	\begin{lstlisting}
+	gmx pdb2gmx -f protein.pdb -o protein.gro -p topol.top -ignh
+	\end{lstlisting}
+	
+	按需求选择合适的力场和水模型。参见附录：力场与水模型的选择。
+	
+	\subsection{小分子拓扑文件的生成}
+	\subsubsection{小分子的量子化学分析}
+	小分子中各原子的化学环境不如蛋白规整，故常需自行补全对应的力场参数。此外，量化分析的结果也可用于计算小分子的高精度原子电荷。
+	
+	在avogadro中打开\texttt{mol.pdb},查看小分子是否有氢原子缺失的情况，如有则进行补全。使用avogadro中移动原子的功能，手动初步消除原子间的不合理接触。将结果保存为\texttt{mol.xyz}.将\texttt{mol.xyz}中的原子坐标部分粘贴进\texttt{mol.inp}，并按需求设定参数.模板和参数设定参见附录 \ref{sec:orca temple} 。
+	
+	在WSL终端中输入
+	\begin{lstlisting}
+	orca mol.inp > mol.out &
+	tail -f mol.out
+	\end{lstlisting}
+	运行结束后，按\texttt{Ctrl+C}停止监看输出文件。
+	
+	\subsubsection{小分子原子电荷的计算}
+	启动multiwfn程序，拖入\texttt{mol.gbw}波函数文件，依次选择\texttt{7-18-1}计算标准的RESP电荷。计算结束后，按\texttt{y}输出\texttt{chg}文件备用，按\texttt{q}退出程序。
+	
+	\subsubsection{小分子拓扑文件的生成（适用于AMBER蛋白质力场）}
+	在WSL终端中输入
+	\begin{lstlisting}
+	obabel mol.xyz -O mol.mol2     #注意此mol.xyz应是结构优化后，或至少是加氢后的结果。
+	\end{lstlisting}
+	
+	启动sobtop程序，将\texttt{mol.mol2}拖入，选择\texttt{2}生成\texttt{mol.gro}文件。
+	
+	选择\texttt{7-10},然后载入\texttt{mol.chg}来指认原子电荷。选择\texttt{0}返回上级菜单。
+	
+	选择\texttt{1-2-3},并按要求载入\texttt{mol.hess}即Hessian矩阵文件，完成\texttt{mol.itp}和\texttt{mol.top}的生成。
+	
+	\subsubsection{生成和引入小分子限制势文件}
+	在WSL终端中输入
+	\begin{lstlisting}
+	gmx genrestr -f mol.gro -o posre_mol.itp
+	\end{lstlisting}
+	输入\texttt{0}来选择整个小分子。
+	
+	用文本编辑器打开\texttt{mol.itp}文件，并在其末尾添加以下内容以引入小分子的限制势文件：
+	\begin{lstlisting}
+	#ifdef POSRES
+	#include "posre_mol.itp"
+	#endif
+	\end{lstlisting}
+	
+	\subsection{把小分子引入体系}
+	\subsubsection{合并\texttt{gro}文件}
+	\texttt{gro}文件也是顺序读取的文本型文件，其核心部分为：
+	\begin{lstlisting}
+	MoleculeName
+	6236
+	574NSER     N    1   1.738  -2.177  -0.168
+	574NSER    H1    2   1.702  -2.254  -0.219
+	574NSER    H2    3   1.803  -2.126  -0.225
+	574NSER    H3    4   1.785  -2.210  -0.086
+	\end{lstlisting}
+	
+	把\texttt{mol.gro}中的对应部分粘贴到\texttt{protein.gro}的末尾，并更正第二行的原子总数，并将此文件另存为\texttt{complex.gro}。完成后，使用可视化工具确认\texttt{complex.gro}中小分子的位置无误。
+	
+	\subsubsection{将小分子引入\texttt{topol.top}}
+	打开\texttt{topol.top},在
+	\begin{lstlisting}
+	; Include forcefield parameters
+	#include "xxx.ff/forcefield.itp"
+	\end{lstlisting}
+	下方添加一行，其内容是：
+	\begin{lstlisting}
+	#include "mol.itp"
+	\end{lstlisting}
+	
+	此外，在\texttt{topol.top}末尾的\texttt{[molecules]}字段引入小分子，注意引入顺序与\texttt{complex.gro}的顺序一致，并在最后空一行。更改后的\texttt{[molecules]}如：
+	\begin{lstlisting}
+	[ molecules ]
+	; Compound        #mols
+	Protein_chain_A     1
+	mol 1
+	此处空一行
+	\end{lstlisting}
+	
+	\section{溶剂化与离子添加 (Solvation \& Ions)}
+	\subsection{设盒子与加水}
+	在WSL终端中输入
+	\begin{lstlisting}
+	gmx editconf -f complex.gro -o complex_box.gro -d 1 -bt cubic
+	gmx solvate -cp complex_box.gro -o complex_sol.gro -p topol.top
+	\end{lstlisting}
+	
+	如果使用的四点水模型，应使用
+	\begin{lstlisting}
+	gmx editconf -f complex.gro -o complex_box.gro -d 1 -bt cubic
+	gmx solvate -cp complex_box.gro -o complex_sol.gro -p topol.top -cs tip4p
+	\end{lstlisting}
+	
+	\subsection{添加离子}
+	在工作目录下准备\texttt{em.mdp}、\texttt{pr.mdp}、\texttt{md.mdp}.参见附录：常用mdp模板。
+	
+	在WSL终端中输入
+	\begin{lstlisting}
+	gmx grompp -f em.mdp -c complex_sol.gro -p topol.top -o em.tpr -maxwarn 1
+	gmx genion -s em.tpr -p topol.top -o system.gro -neutral -conc 0.15
+	\end{lstlisting}
+	并选择替换\texttt{SOL}组。
+	
+	\section{能量最小化与预平衡 (Energy Minimization \& pre-Equilibration)}
+	在WSL终端中输入以下命令来进行能量极小化。
+	\begin{lstlisting}
+	gmx grompp -f em.mdp -c system.gro -p topol.top -o em.tpr
+	gmx mdrun -v -deffnm em
+	\end{lstlisting}
+	在WSL终端中输入以下命令来进行预平衡。
+	\begin{lstlisting}
+	gmx grompp -f pr.mdp -c em.gro -p topol.top -r em.gro -o pr.tpr
+	gmx mdrun -v -deffnm pr -pin on
+	\end{lstlisting}
+	
+	\section{生产动力学模拟 (Production MD)}
+	\subsection{生成索引文件}
+	在WSL终端中输入
+	\begin{lstlisting}
+	gmx make_ndx -f pr.gro
+	\end{lstlisting}
+	
+	通过例如“\texttt{1|2}”的方式把蛋白、配体和其他附属成分（如蛋白上的金属离子）绑为一个组，使用"\texttt{name 组号 protein\_lig}"的方式将这个组重命名为\texttt{protein\_lig}。通过“\texttt{!组号}”的方式将剩余的溶剂等成分绑为另一个组，并重命名为\texttt{envir}.输入\texttt{q}保存退出。
+	\subsection{生成生产动力学的\texttt{tpr}文件}
+	在WSL终端中输入
+	\begin{lstlisting}
+	gmx grompp -f md.mdp -c pr.gro -p topol.top -o md.tpr -n index.ndx
+	\end{lstlisting}
+	\subsection{执行生产动力学模拟}
+	将\texttt{md.tpr}上传到云GPU服务器，并运行如下指令开始模拟：
+	\begin{lstlisting}
+	gmx mdrun -v -deffnm md
+	\end{lstlisting}
+	\section{结果分析 (Data Analysis)}
+	
+	\newpage
+	
+	% --- 附录部分 ---
+	\begin{appendices}
+		\section{ORCA输入文件模板与参数选择}
+		\label{sec:orca temple}
+		ORCA是一个量子化学计算软件，在此主要起到几何优化以及计算输出Hessian矩阵的作用。以下是一个常用的ORCA输入文件即\texttt{mol.inp}模板：
+	\begin{lstlisting}
+	! HF 6-31G* Opt Freq
+	%pal nprocs 8 end
+	%maxcore 4000
+	* xyz 0 1
+	此处为原子及其坐标
+	*
+	\end{lstlisting}
+		\section{常见错误处理 (Troubleshooting)}
+		记录在 Arch Linux 上运行模拟时遇到的具体问题。
+	\end{appendices}
+	
+\end{document}
