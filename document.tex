@@ -100,7 +100,7 @@
 	
 	\texttt{pdb}是顺序读写的文本型文件格式，其核心部分即\texttt{[ATOM]}字段依次定义了原子序号、原子类型、残基名称、链编号、残基序号、X坐标、Y坐标、Z坐标、占有度(概率)、B因子、原子名称。在Pymol中可视化\texttt{protein.pdb}，检查其蛋白结构是否有缺失。如缺失片段较短(<10aa)或位于非口袋区域，可以使用pdbfixer进行补全，否则使用Alpha Fold3进行补全。
 	
-	pdbfixer的使用方法如下：
+	Pdbfixer的使用方法如下：
 	
 	在RCSB PDB数据库查询此结构的原始\texttt{pdb}文件，并获取对应的\texttt{[SEQRES]}字段，例如：
 	\begin{lstlisting}
@@ -113,7 +113,7 @@
 	pdbfixer
 	\end{lstlisting}
 	
-	在浏览器中访问\texttt{localhost:8000},打开pdbfixer页面，按引导补全结构即可。
+	在浏览器中访问\texttt{localhost:8000},打开Pdbfixer页面，按引导补全结构即可。
 	
 	\subsection{蛋白拓扑文件的生成}
 	在WSL终端中输入
@@ -127,7 +127,7 @@
 	\subsubsection{小分子的量子化学分析}
 	小分子中各原子的化学环境不如蛋白规整，故常需自行补全对应的力场参数。此外，量化分析的结果也可用于计算小分子的高精度原子电荷。
 	
-	在avogadro中打开\texttt{mol.pdb},查看小分子是否有氢原子缺失的情况，如有则进行补全。使用avogadro中移动原子的功能，手动初步消除原子间的不合理接触。将结果保存为\texttt{mol.xyz}.将\texttt{mol.xyz}中的原子坐标部分粘贴进\texttt{mol.inp}，并按需求设定参数.模板和参数设定参见附录 \ref{sec:orca temple} 。
+	在Avogadro中打开\texttt{mol.pdb},查看小分子是否有氢原子缺失的情况，如有则进行补全。使用Avogadro中移动原子的功能，手动初步消除原子间的不合理接触。将结果保存为\texttt{mol.xyz}.将\texttt{mol.xyz}中的原子坐标部分粘贴进\texttt{mol.inp}，并按需求设定参数.模板和参数设定参见附录 \ref{sec:orca temple} 。
 	
 	在WSL终端中输入
 	\begin{lstlisting}
